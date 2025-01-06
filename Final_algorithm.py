@@ -68,7 +68,7 @@ class NSGA2_TTP:
         coordinates: pd.DataFrame,
         items: pd.DataFrame,
         pop_size: int = 100,
-        generations: int = 200,
+        generations: int = 10,
         mutation_rate: float = 0.2,
         tournament_size: int = 3
     ):
@@ -545,18 +545,18 @@ class NSGA2_TTP:
             population = new_population
             fitnesses = new_fitnesses
 
-            # 统计并输出
-            best_idx, best_sol = self.get_best_in_population(population, fitnesses)
-            best_profit, best_time = best_sol
             if gen % 10 == 0:
-                print(f"Gen {gen}: best_profit={best_profit}, best_time={best_time}")
-            best_records.append((gen, best_profit, best_time))
+                current_fitness = [fitnesses[i] for i,_ in enumerate(new_population)]
+                print(f"Generation {gen}")
+                print(f"Number of solutions in first front: {len(fronts[0])}")
+                print(f"Best profit: {max(f[0] for f in current_fitness)}")
+                print(f"Best time: {min(-f[1] for f in current_fitness)}")
 
-        # 最终选一个最优解
-        best_id, (best_profit, best_time) = self.get_best_in_population(population, fitnesses)
-        best_tour, best_picking = population[best_id]
+        # Get final Pareto front
+        final_fitness = [self.evaluate_solution(t, p) for (t, p) in population]
+        final_fronts = self.fast_nondominated_sort(population, final_fitness)
 
-        return best_tour, best_picking, best_profit, best_time, best_records
+        return population,final_fitness,final_fronts
 
     def create_initial_population(self) -> List[Tuple[List[int], List[bool]]]:
         """
@@ -684,79 +684,64 @@ if __name__ == "__main__":
 
     # 创建并运行NSGA2
     solver = NSGA2_TTP(metadata, city_coords_df, items_df,
-                       pop_size=100, generations=200,
+                       pop_size=100, generations=3,
                        mutation_rate=0.2, tournament_size=3)
 
-    best_tour, best_picking, best_profit, best_time, records = solver.solve()
-    print("\n============================")
-    print(f"Final Best profit = {best_profit}, Best time = {best_time}")
-    print("Best tour:", best_tour)
-    print("Picking plan sum:", sum(best_picking))
+    population,final_fitness,final_fronts = solver.solve()
+    pareto_front = [(population[idx][0], population[idx][1], final_fitness[idx])
+                    for idx in final_fronts[0]]
+    profit_fronts = []
+    time_fronts = []
+    front_ind = []
+    result_datas = []
+    for i, (tour, picking, (profit, neg_time)) in enumerate(pareto_front):
+        print("\n============================")
+        print(f"\nSolution {i + 1}:")
+        print(f"Profit: {profit}")
+        print(f"Travel time: {neg_time}")  # Convert back to positive time
+        profit_fronts.append(profit)
+        time_fronts.append(neg_time)
+        front_ind.append(0)
+        result_data = {
+            'tour': [tour],
+            'picking_plan': list(picking),
+            'profit': profit,
+            'time': neg_time
+        }
+        result_data['picking_plan'] = [1 if pick else 0 for pick in result_data['picking_plan']]
+
+        result_datas.append(result_data)
+
+
+    for ind,_ in enumerate(final_fronts[1:]):
+        other_front = [(population[idx][0], population[idx][1], final_fitness[idx])
+                        for idx in _]
+        for i, (tour, picking, (profit, neg_time)) in enumerate(other_front):
+            print("\n============================")
+            print(f"\nSolution {i + 1}:")
+            print(f"Profit: {profit}")
+            print(f"Travel time: {neg_time}")  # Convert back to positive time
+            profit_fronts.append(profit)
+            time_fronts.append(neg_time)
+            front_ind.append(ind+1)
 
     # 创建结果目录
     result_dir = os.path.join(current_dir, "results")
     if not os.path.exists(result_dir):
         os.makedirs(result_dir)
 
+
     # 1. 保存进化过程记录
-    df_records = pd.DataFrame(records, columns=['generation','best_profit','best_time'])
+    df_records = pd.DataFrame({
+        'front': front_ind,
+        'profit': profit_fronts,
+        'time': time_fronts
+    })
     df_records.to_csv(os.path.join(result_dir, "nsga2_ttp_generation_records.csv"), index=False)
     print(f"\nGeneration records saved to: {os.path.join(result_dir, 'nsga2_ttp_generation_records.csv')}")
 
-    # 2. 保存最终解的基本信息
-    result_data = {
-        'tour': [best_tour],
-        'picking_plan': [list(best_picking)],
-        'profit': [best_profit],
-        'time': [best_time]
-    }
-    result_df = pd.DataFrame(result_data)
-    result_file = os.path.join(result_dir, "nsga2_ttp_final_result.csv")
-    result_df.to_csv(result_file, index=False)
-    print(f"Final result saved to: {result_file}")
 
-    # 3. 保存详细的picking信息
-    picked_items = []
-    for i, is_picked in enumerate(best_picking):
-        if is_picked:
-            item = items_df.iloc[i]
-            picked_items.append({
-                'item_id': item['item_id'],
-                'city_id': item['city_id'],
-                'value': item['value'],
-                'weight': item['weight']
-            })
-    picked_items_df = pd.DataFrame(picked_items)
-    picked_items_file = os.path.join(result_dir, "picked_items_detail.csv")
-    picked_items_df.to_csv(picked_items_file, index=False)
-    print(f"Picked items details saved to: {picked_items_file}")
-
-    # 4. 保存路径信息
-    tour_info = []
-    for i, city_id in enumerate(best_tour):
-        coords = city_coords_df.loc[city_id]
-        tour_info.append({
-            'position': i,
-            'city_id': city_id,
-            'x': coords['x'],
-            'y': coords['y']
-        })
-    tour_df = pd.DataFrame(tour_info)
-    tour_file = os.path.join(result_dir, "tour_path_detail.csv")
-    tour_df.to_csv(tour_file, index=False)
-    print(f"Tour path details saved to: {tour_file}")
-
-    # 5. 保存统计信息
-    stats = {
-        'total_cities': len(best_tour),
-        'total_items': len(best_picking),
-        'picked_items': sum(best_picking),
-        'picking_ratio': sum(best_picking) / len(best_picking),
-        'final_profit': best_profit,
-        'final_time': best_time,
-        'profit_per_time': best_profit / best_time if best_time > 0 else 0
-    }
-    stats_df = pd.DataFrame([stats])
-    stats_file = os.path.join(result_dir, "solution_statistics.csv")
-    stats_df.to_csv(stats_file, index=False)
-    print(f"Solution statistics saved to: {stats_file}")
+    #2. 保存pareto front 的结果数据
+    result_record = pd.DataFrame(result_datas)
+    result_record.to_csv(os.path.join(result_dir, "result_data.csv"), index=False)
+    print(f"\nfinal result records saved to: {os.path.join(result_dir, 'result_data.csv')}")
