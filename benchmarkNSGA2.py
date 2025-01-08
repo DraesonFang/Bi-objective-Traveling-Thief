@@ -69,9 +69,9 @@ class NSGA2:
         self.renting_ratio = metadata['renting_ratio']
 
         # NSGA-II parameters
-        self.pop_size = 50
+        self.pop_size = 10
         self.generations = 3
-        self.mutation_rate = 0.1
+        self.mutation_rate = 0.2
         self.tournament_size = 3
 
     def calculate_distance(self, city1: int, city2: int) -> float:
@@ -246,7 +246,7 @@ class NSGA2:
 
             population = [new_population[i] for i in next_population]
 
-            if generation % 10 == 0:
+            if generation % 1 == 0:
                 current_fitness = [fitnesses[i] for i, _ in enumerate(new_population)]
                 print(f"Generation {generation}")
                 print(f"Number of solutions in first front: {len(fronts[0])}")
@@ -309,7 +309,7 @@ class NSGA2:
 
 # Example usage
 if __name__ == "__main__":
-    file_path = "data_resources/a280-n279.txt"
+    file_path = "data_resources/pla33810-n338090.txt"
     metadata, city_coords, city_items = load_all_data(file_path)
     city_coords = pd.DataFrame.from_dict(city_coords, orient='index', columns=['x', 'y'])
     items_info = pd.DataFrame(city_items, columns=['item_id', 'city_id', 'value', 'weight'])

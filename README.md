@@ -4,6 +4,16 @@ Team GG-Bond Solves Bi-objective Traveling Thief Problem using Nature-Inspired A
 Here is the Github Link [GGBond Project](https://github.com/DraesonFang/Bi-objective-Traveling-Thief/tree/main)
 
 ## Start
+
+### Library
+ you should make sure that you've already downloaded the packages as follows before start:
+```
+pandas
+numpy
+random
+os
+typing import List, Tuple, Dict
+```
 #### Final_algorithm.py is our final code, you can go to 'if __name__ == "__main__":' This is where our program starts. 
 #### Then change the value of 'file_path' with your file path.   
 ```
